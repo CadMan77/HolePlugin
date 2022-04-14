@@ -13,6 +13,7 @@ using System.Threading.Tasks;
 namespace HolePlugin
 {
     [TransactionAttribute(TransactionMode.Manual)]
+    //[RegenerationAttribute(RegenerationOption.)]
     public class AddHole : IExternalCommand
     {        
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
@@ -26,14 +27,13 @@ namespace HolePlugin
             }
 
             FamilySymbol holeFS = new FilteredElementCollector(arDoc)
-                .OfClass(typeof(FamilySymbol))
+                //.OfClass(typeof(FamilySymbol))
                 .OfCategory(BuiltInCategory.OST_GenericModel)
                 .OfType<FamilySymbol>()
                 .Where(x => x.FamilyName.Equals("Отверстие"))
                 .SingleOrDefault();
-                //.FirstOrDefault();
 
-            if (holeFS==null) // ???
+            if (holeFS==null)
             {
                 message = "Ошибка! Семейство \"Отверстие\" не загружено в АР-файл.";
                 return Result.Failed;
@@ -51,10 +51,10 @@ namespace HolePlugin
                 return Result.Failed;
             }
 
-            List<Duct> ducts = new FilteredElementCollector(ovDoc)
-                .OfClass(typeof(Duct))
-                .OfType<Duct>()
-                .ToList();
+            //List<Duct> ducts = new FilteredElementCollector(ovDoc)
+            //    .OfClass(typeof(Duct))
+            //    .OfType<Duct>()
+            //    .ToList();
             //TaskDialog.Show("DuctQTY", ducts.Count.ToString());
 
             List<Pipe> pipes = new FilteredElementCollector(ovDoc)
@@ -63,7 +63,8 @@ namespace HolePlugin
                 .ToList();
             //TaskDialog.Show("PipeQTY", pipes.Count.ToString());
 
-            ReferenceIntersector referenceIntersector = new ReferenceIntersector(new ElementClassFilter(typeof(Wall)), FindReferenceTarget.Element, view3D);
+            //ReferenceIntersector referenceIntersector = new ReferenceIntersector(new ElementClassFilter(typeof(Wall)), FindReferenceTarget.Element, view3D);
+            ReferenceIntersector referenceIntersector2 = new ReferenceIntersector(new ElementClassFilter(typeof(Pipe)), FindReferenceTarget.Element, view3D);
 
             Transaction ts = new Transaction(arDoc, "Hole Insert Transaction");
             ts.Start();
@@ -71,34 +72,79 @@ namespace HolePlugin
             if (!holeFS.IsActive)
                 holeFS.Activate();
 
-            foreach (Duct d in ducts)
+            int holeQTY = 0;
+            //foreach (Duct d in ducts)
+            //{
+            //    Line curve = (d.Location as LocationCurve).Curve as Line;
+            //    XYZ point = curve.GetEndPoint(0);
+            //    XYZ direction = curve.Direction;
+            //    List<ReferenceWithContext> intersections = referenceIntersector.Find(point, direction)
+            //        .Where(x => x.Proximity <= curve.Length)
+            //        .Distinct(new ReferenceWithContextElementEqualityComparer()) // оставляет единственный 
+            //        .ToList();
+            //    foreach (ReferenceWithContext refer in intersections)
+            //    {
+            //        double proximity = refer.Proximity;
+            //        Reference reference = refer.GetReference();
+            //        Wall hostWall = arDoc.GetElement(reference.ElementId) as Wall;
+
+            //        Level level = arDoc.GetElement(hostWall.LevelId) as Level;
+
+            //        XYZ pointHole = point + (direction * proximity);
+
+            //        FamilyInstance hole = arDoc.Create.NewFamilyInstance(pointHole, holeFS, hostWall, level, StructuralType.NonStructural);
+
+            //        holeQTY += 1;
+
+            //        Parameter width = hole.LookupParameter("Ширина");
+            //        width.Set(d.Diameter);
+            //        Parameter height = hole.LookupParameter("Высота");
+            //        height.Set(d.Diameter);
+            //    }
+            //}
+
+            foreach (Pipe p in pipes)
             {
-                Line curve = (d.Location as LocationCurve).Curve as Line;
+                Line curve = (p.Location as LocationCurve).Curve as Line;
+
                 XYZ point = curve.GetEndPoint(0);
                 XYZ direction = curve.Direction;
-                List<ReferenceWithContext> intersections = referenceIntersector.Find(point, direction)
+                List<ReferenceWithContext> intersections = referenceIntersector2.Find(point, direction)
                     .Where(x => x.Proximity <= curve.Length)
                     .Distinct(new ReferenceWithContextElementEqualityComparer()) // оставляет единственный 
                     .ToList();
+
+                TaskDialog.Show("intersections.Count", intersections.Count.ToString()); // !!! 0 !!!
+
                 foreach (ReferenceWithContext refer in intersections)
                 {
                     double proximity = refer.Proximity;
                     Reference reference = refer.GetReference();
-                    Wall wall = arDoc.GetElement(reference.ElementId) as Wall;
+                    Wall hostWall = arDoc.GetElement(reference.ElementId) as Wall;
 
-                    Level level = arDoc.GetElement(wall.LevelId) as Level;
+                    Level level = arDoc.GetElement(hostWall.LevelId) as Level;
 
                     XYZ pointHole = point + (direction * proximity);
 
-                    FamilyInstance hole = arDoc.Create.NewFamilyInstance(pointHole, holeFS, wall, level, StructuralType.NonStructural);
+                    FamilyInstance hole = arDoc.Create.NewFamilyInstance(pointHole, holeFS, hostWall, level, StructuralType.NonStructural);
+
+                    holeQTY += 1;
 
                     Parameter width = hole.LookupParameter("Ширина");
-                    width.Set(d.Diameter);
+                    width.Set(p.Diameter);
                     Parameter height = hole.LookupParameter("Высота");
-                    height.Set(d.Diameter);
+                    height.Set(p.Diameter);
                 }
             }
+
+            //arDoc.Regenerate(); // Не помогло
+
             ts.Commit();
+
+            //commandData.Application.ActiveUIDocument.RefreshActiveView(); // Не помогло
+            //commandData.Application.ActiveUIDocument.UpdateAllOpenViews(); // Не помогло
+
+            TaskDialog.Show("Выполнено", $"Создано {holeQTY} отверстий.");
             return Result.Succeeded;
         }
 
