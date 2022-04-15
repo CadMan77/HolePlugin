@@ -51,20 +51,17 @@ namespace HolePlugin
                 return Result.Failed;
             }
 
-            //List<Duct> ducts = new FilteredElementCollector(ovDoc)
-            //    .OfClass(typeof(Duct))
-            //    .OfType<Duct>()
-            //    .ToList();
-            //TaskDialog.Show("DuctQTY", ducts.Count.ToString());
+            List<Duct> ducts = new FilteredElementCollector(ovDoc)
+                .OfClass(typeof(Duct))
+                .OfType<Duct>()
+                .ToList();
 
             List<Pipe> pipes = new FilteredElementCollector(ovDoc)
                 .OfClass(typeof(Pipe))
                 .OfType<Pipe>()
                 .ToList();
-            //TaskDialog.Show("PipeQTY", pipes.Count.ToString());
 
-            //ReferenceIntersector referenceIntersector = new ReferenceIntersector(new ElementClassFilter(typeof(Wall)), FindReferenceTarget.Element, view3D);
-            ReferenceIntersector referenceIntersector2 = new ReferenceIntersector(new ElementClassFilter(typeof(Pipe)), FindReferenceTarget.Element, view3D);
+            ReferenceIntersector referenceIntersector = new ReferenceIntersector(new ElementClassFilter(typeof(Wall)), FindReferenceTarget.Element, view3D);
 
             Transaction ts = new Transaction(arDoc, "Hole Insert Transaction");
             ts.Start();
@@ -72,36 +69,38 @@ namespace HolePlugin
             if (!holeFS.IsActive)
                 holeFS.Activate();
 
-            int holeQTY = 0;
-            //foreach (Duct d in ducts)
-            //{
-            //    Line curve = (d.Location as LocationCurve).Curve as Line;
-            //    XYZ point = curve.GetEndPoint(0);
-            //    XYZ direction = curve.Direction;
-            //    List<ReferenceWithContext> intersections = referenceIntersector.Find(point, direction)
-            //        .Where(x => x.Proximity <= curve.Length)
-            //        .Distinct(new ReferenceWithContextElementEqualityComparer()) // оставляет единственный 
-            //        .ToList();
-            //    foreach (ReferenceWithContext refer in intersections)
-            //    {
-            //        double proximity = refer.Proximity;
-            //        Reference reference = refer.GetReference();
-            //        Wall hostWall = arDoc.GetElement(reference.ElementId) as Wall;
+            int ductHoleQTY = 0;
+            int pipeHoleQTY = 0;
 
-            //        Level level = arDoc.GetElement(hostWall.LevelId) as Level;
+            foreach (Duct d in ducts)
+            {
+                Line curve = (d.Location as LocationCurve).Curve as Line;
+                XYZ point = curve.GetEndPoint(0);
+                XYZ direction = curve.Direction;
+                List<ReferenceWithContext> intersections = referenceIntersector.Find(point, direction)
+                    .Where(x => x.Proximity <= curve.Length)
+                    .Distinct(new ReferenceWithContextElementEqualityComparer()) // оставляет единственный 
+                    .ToList();
+                foreach (ReferenceWithContext refer in intersections)
+                {
+                    double proximity = refer.Proximity;
+                    Reference reference = refer.GetReference();
+                    Wall hostWall = arDoc.GetElement(reference.ElementId) as Wall;
 
-            //        XYZ pointHole = point + (direction * proximity);
+                    Level level = arDoc.GetElement(hostWall.LevelId) as Level;
 
-            //        FamilyInstance hole = arDoc.Create.NewFamilyInstance(pointHole, holeFS, hostWall, level, StructuralType.NonStructural);
+                    XYZ pointHole = point + (direction * proximity);
 
-            //        holeQTY += 1;
+                    FamilyInstance hole = arDoc.Create.NewFamilyInstance(pointHole, holeFS, hostWall, level, StructuralType.NonStructural);
 
-            //        Parameter width = hole.LookupParameter("Ширина");
-            //        width.Set(d.Diameter);
-            //        Parameter height = hole.LookupParameter("Высота");
-            //        height.Set(d.Diameter);
-            //    }
-            //}
+                    ductHoleQTY += 1;
+
+                    Parameter width = hole.LookupParameter("Ширина");
+                    width.Set(d.Diameter);
+                    Parameter height = hole.LookupParameter("Высота");
+                    height.Set(d.Diameter);
+                }
+            }
 
             foreach (Pipe p in pipes)
             {
@@ -109,12 +108,10 @@ namespace HolePlugin
 
                 XYZ point = curve.GetEndPoint(0);
                 XYZ direction = curve.Direction;
-                List<ReferenceWithContext> intersections = referenceIntersector2.Find(point, direction)
+                List<ReferenceWithContext> intersections = referenceIntersector.Find(point, direction)
                     .Where(x => x.Proximity <= curve.Length)
                     .Distinct(new ReferenceWithContextElementEqualityComparer()) // оставляет единственный 
                     .ToList();
-
-                TaskDialog.Show("intersections.Count", intersections.Count.ToString()); // !!! 0 !!!
 
                 foreach (ReferenceWithContext refer in intersections)
                 {
@@ -128,7 +125,7 @@ namespace HolePlugin
 
                     FamilyInstance hole = arDoc.Create.NewFamilyInstance(pointHole, holeFS, hostWall, level, StructuralType.NonStructural);
 
-                    holeQTY += 1;
+                    pipeHoleQTY += 1;
 
                     Parameter width = hole.LookupParameter("Ширина");
                     width.Set(p.Diameter);
@@ -137,14 +134,14 @@ namespace HolePlugin
                 }
             }
 
-            //arDoc.Regenerate(); // Не помогло
+            //arDoc.Regenerate(); // Не помогло устранить проблему с отображением отверстий на 3D
 
             ts.Commit();
 
-            //commandData.Application.ActiveUIDocument.RefreshActiveView(); // Не помогло
-            //commandData.Application.ActiveUIDocument.UpdateAllOpenViews(); // Не помогло
+            //commandData.Application.ActiveUIDocument.RefreshActiveView(); // Не помогло устранить проблему с отображением отверстий на 3D
+            //commandData.Application.ActiveUIDocument.UpdateAllOpenViews(); // Не помогло устранить проблему с отображением отверстий на 3D
 
-            TaskDialog.Show("Выполнено", $"Создано {holeQTY} отверстий.");
+            TaskDialog.Show("Выполнено", $"Создано отверстий:{Environment.NewLine}  для воздуховодов - {ductHoleQTY};{Environment.NewLine}  для труб - {pipeHoleQTY}.");
             return Result.Succeeded;
         }
 
